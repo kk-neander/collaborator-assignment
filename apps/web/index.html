@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="description" content="Split Brain — 3 humans. 1 AI. 4 versions of the same file." />
+    <title>Split Brain</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Pick the theme before first paint: saved choice, else dark unless the OS asks for light.
+      (function () {
+        var theme = "dark";
+        try {
+          var saved = localStorage.getItem("sb:theme");
+          if (saved === "dark" || saved === "light") theme = saved;
+          else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) theme = "light";
+        } catch (e) {}
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Split Brain launcher for macOS, Linux, WSL and Git Bash. Windows PowerShell: .\sb.ps1
+# Usage: ./sb <command> [args]   — run ./sb help for the list.
+set -euo pipefail
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$ROOT"
+
+bold() { printf '\033[1m%s\033[0m\n' "$*"; }
+warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
+die() { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
+
+compose() { docker compose "$@"; }
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "Docker is not installed. Get Docker Desktop (macOS/Windows) or Docker Engine (Linux), then retry. ./sb doctor explains more."
+  docker info >/dev/null 2>&1 || die "Docker is installed but not running. Start Docker Desktop (or the docker service) and retry."
+  docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is missing. Update Docker Desktop, or install the compose plugin."
+}
+
+# Prints "major minor" of the host Node, or nothing.
+node_version() {
+  command -v node >/dev/null 2>&1 || return 0
+  node -e 'const [a,b]=process.versions.node.split(".").map(Number);console.log(a+" "+b)' 2>/dev/null || true
+}
+
+# Host Node can run our TypeScript directly from 22.18 (type stripping).
+host_node_runs_ts() {
+  local v; v="$(node_version)"; [ -n "$v" ] || return 1
+  set -- $v
+  [ "$1" -gt 22 ] || { [ "$1" -eq 22 ] && [ "$2" -ge 18 ]; }
+}
+
+host_node_runs_js() {
+  local v; v="$(node_version)"; [ -n "$v" ] || return 1
+  set -- $v
+  [ "$1" -ge 20 ]
+}
+
+ensure_env() {
+  if [ ! -f .env ]; then
+    cp .env.example .env
+    warn "Created .env from .env.example. Ada (the AI bot) needs LLM_PROVIDER, LLM_MODEL and usually LLM_API_KEY."
+  fi
+}
+
+# Records when the challenge started, so ./sb trace knows which sessions count.
+ensure_started_marker() {
+  [ -f .split-brain/started.json ] && return 0
+  if host_node_runs_js; then
+    node tools/trace/cli.mjs init >/dev/null 2>&1 || true
+  else
+    compose --profile tools run --rm tools node tools/trace/cli.mjs init --project-root /app >/dev/null 2>&1 || true
+  fi
+}
+
+probe() {
+  if command -v curl >/dev/null 2>&1; then curl -fsS "$1" >/dev/null 2>&1
+  elif command -v wget >/dev/null 2>&1; then wget -qO- "$1" >/dev/null 2>&1
+  else docker compose exec -T relay node -e "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1
+  fi
+}
+
+wait_healthy() {
+  local port; port="$(grep -E '^SB_PORT=' .env 2>/dev/null | cut -d= -f2)"; port="${port:-8080}"
+  printf 'Waiting for Split Brain on port %s ' "$port"
+  for _ in $(seq 1 90); do
+    if probe "http://localhost:${port}/healthz"; then
+      echo; bold "Split Brain is up."
+      echo "  Demo (3 people side by side): http://localhost:${port}/demo"
+      echo "  Join as one person:           http://localhost:${port}/"
+      echo "  Logs:                         ./sb logs"
+      return 0
+    fi
+    printf '.'; sleep 1
+  done
+  echo; die "Not healthy after 90s. Check ./sb logs relay"
+}
+
+run_ts() {
+  # Runs a TypeScript entrypoint on host Node if new enough, otherwise in the tools container.
+  local entry="$1"; shift
+  if host_node_runs_ts && [ -d node_modules ]; then
+    node "$entry" "$@"
+  else
+    need_docker
+    compose --profile tools run --rm tools node "$entry" "$@"
+  fi
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  up)
+    need_docker; ensure_env
+    out="$(mktemp)"
+    if ! compose up --build -d "$@" 2>&1 | tee "$out"; then :; fi
+    if grep -q "fully subnetted" "$out"; then
+      warn "Docker has no free default network ranges on this machine; using fixed subnets (compose.subnets.yml)."
+      grep -q '^COMPOSE_FILE=' .env || printf '\nCOMPOSE_FILE=docker-compose.yml:compose.subnets.yml\n' >> .env
+      compose -f docker-compose.yml -f compose.subnets.yml up --build -d "$@"
+    elif grep -qiE "^ *(error|failed)" "$out" && ! compose ps --status running --services 2>/dev/null | grep -q chaos; then
+      rm -f "$out"; die "docker compose up failed (see above). ./sb doctor may help."
+    fi
+    rm -f "$out"
+    ensure_started_marker
+    wait_healthy ;;
+  down) need_docker; compose down "$@" ;;
+  reset)
+    need_docker
+    read -r -p "Delete all shared documents and start from the seed workspace? [y/N] " ok
+    case "$ok" in [yY]*) compose down -v ;; *) echo "Cancelled." ;; esac ;;
+  logs) need_docker; compose logs -f --tail=200 "$@" ;;
+  ps) need_docker; compose ps ;;
+  restart) need_docker; compose restart "$@" ;;
+  dev)
+    need_docker; ensure_env; ensure_started_marker
+    compose -f docker-compose.yml -f compose.dev.yml up --build "$@" ;;
+  test)
+    if host_node_runs_ts && [ -d node_modules ]; then npx vitest run "$@"; else need_docker; compose --profile tools run --rm tools npx vitest run "$@"; fi ;;
+  score) run_ts harness/score/src/cli.ts "$@" ;;
+  trace|submit|init)
+    if host_node_runs_js; then
+      node tools/trace/cli.mjs "$cmd" "$@"
+    else
+      need_docker
+      bash tools/trace/docker-run.sh "$cmd" "$@"
+    fi ;;
+  doctor)
+    if host_node_runs_js; then node tools/doctor.mjs
+    else need_docker; echo "Docker OK. Install Node.js 20+ for host-side trace/submit and a fuller check (or everything still runs in Docker)."; fi ;;
+  help|-h|--help)
+    cat <<'EOF'
+Split Brain — 3 humans. 1 AI. 4 versions of the same file.
+
+  ./sb up         build and start everything (relay, chaos proxy, AI bot)
+  ./sb down       stop it            ./sb reset   wipe shared documents
+  ./sb logs [svc] follow logs        ./sb ps      service status
+  ./sb dev        hot-reload mode (edit code, see it live)
+  ./sb test       unit + property tests
+  ./sb score      run the scenario harness (--track floor|sync-core|ai-peer|files|runtime|hostile, --seed N)
+  ./sb trace      snapshot your AI-agent sessions for this project (--dry-run to preview)
+  ./sb submit <email>  build your submission bundle and upload it
+  ./sb doctor     check your machine
+EOF
+    ;;
+  *) die "Unknown command: $cmd (try ./sb help)" ;;
+esac

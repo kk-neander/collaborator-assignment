@@ -1,0 +1,29 @@
+# Hot-reload overlay: ./sb dev
+# Relay, chaos and bot restart on save; the editor runs on Vite at http://localhost:5173
+services:
+  relay:
+    command: ["node", "--watch", "apps/relay/src/main.ts"]
+    volumes: &src
+      - ./packages:/app/packages
+      - ./apps/relay/src:/app/apps/relay/src
+      - ./apps/chaos/src:/app/apps/chaos/src
+      - ./apps/bot/src:/app/apps/bot/src
+      - ./workspace-seed:/app/workspace-seed
+      - ./incidents:/app/incidents
+  chaos:
+    command: ["node", "--watch", "apps/chaos/src/main.ts"]
+    volumes: *src
+  bot:
+    command: ["node", "--watch", "apps/bot/src/main.ts"]
+    volumes: *src
+  web:
+    image: split-brain-app:local
+    command: ["npm", "run", "dev", "-w", "@split-brain/web", "--", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      SB_PROXY_TARGET: http://chaos:8080
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./packages:/app/packages
+      - ./apps/web/src:/app/apps/web/src
+    depends_on: [chaos]

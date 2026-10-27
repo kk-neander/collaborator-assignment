@@ -1,0 +1,4 @@
+# Keep shell scripts runnable on every OS (CRLF breaks bash on Windows checkouts).
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary

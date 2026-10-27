@@ -1,0 +1,17 @@
+{
+  "name": "@split-brain/bot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "*",
+    "@split-brain/protocol": "*",
+    "@split-brain/sync": "*"
+  },
+  "exports": {
+    "./brain": "./src/brain.ts",
+    "./llm": "./src/llm.ts"
+  }
+}

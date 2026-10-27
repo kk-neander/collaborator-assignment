@@ -1,0 +1,90 @@
+# Split Brain: `./sb up` (or `docker compose up --build`), then open http://localhost:8080/demo
+name: split-brain
+
+x-app: &app
+  build: { context: ., target: app }
+  image: split-brain-app:local
+  restart: unless-stopped
+  init: true
+
+services:
+  relay:
+    <<: *app
+    command: ["node", "apps/relay/src/main.ts"]
+    environment:
+      PORT: "4000"
+      DATA_DIR: /data
+      IDLE_TIMEOUT_MS: ${IDLE_TIMEOUT_MS:-}
+      RELAY_SECRET: ${RELAY_SECRET:-}
+      RUNNER_URL: http://runner:5000
+    networks: [default, sandbox]
+    volumes:
+      - relay-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  chaos:
+    <<: *app
+    command: ["node", "apps/chaos/src/main.ts"]
+    environment:
+      PORT: "8080"
+      RELAY_URL: http://relay:4000
+    ports:
+      - "${SB_PORT:-8080}:8080"
+    depends_on:
+      relay: { condition: service_healthy }
+
+  bot:
+    <<: *app
+    command: ["node", "apps/bot/src/main.ts"]
+    restart: on-failure:3
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      RELAY_URL: http://chaos:8080
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      relay: { condition: service_healthy }
+      chaos: { condition: service_started }
+
+  runner:
+    build: { context: ., target: runner }
+    image: split-brain-runner:local
+    restart: unless-stopped
+    init: true
+    networks: [sandbox]
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 768m
+    cpus: 1.0
+    pids_limit: 256
+
+  tools:
+    <<: *app
+    profiles: ["tools"]
+    restart: "no"
+    command: ["npm", "test"]
+    working_dir: /app
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./:/app
+      - /app/node_modules
+      - /app/apps/web/dist
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+networks:
+  default: {}
+  # No route to the internet: code typed into the editor runs here.
+  sandbox:
+    internal: true
+
+volumes:
+  relay-data:

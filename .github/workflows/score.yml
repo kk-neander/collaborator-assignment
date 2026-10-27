@@ -1,0 +1,42 @@
+# Scores every push with the public harness. ai-peer runs only if you add
+# LLM_PROVIDER / LLM_MODEL / LLM_API_KEY (and LLM_BASE_URL) as repository secrets.
+name: score
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Score all tracks
+        env:
+          LLM_PROVIDER: ${{ secrets.LLM_PROVIDER }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          NO_COLOR: "1"
+        run: |
+          node harness/score/src/cli.ts --track all | tee score.txt
+          {
+            echo '## Split Brain score'
+            echo '```'
+            cat score.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scorecard
+          path: |
+            .split-brain/scorecard.json
+            .split-brain/score-card.svg

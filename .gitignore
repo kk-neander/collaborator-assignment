@@ -1,0 +1,11 @@
+node_modules
+dist/
+.cache/
+.env
+.env.*
+!.env.example
+.split-brain/
+submission/
+*.log
+.DS_Store
+coverage/

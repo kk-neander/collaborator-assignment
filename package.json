@@ -1,0 +1,26 @@
+{
+  "name": "split-brain",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "harness/*"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json",
+    "score": "node harness/score/src/cli.ts",
+    "trace": "node tools/trace/cli.mjs trace",
+    "submit": "node tools/trace/cli.mjs submit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "fast-check": "^4.10.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

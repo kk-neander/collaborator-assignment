@@ -1,0 +1,12 @@
+{
+  "name": "@split-brain/score",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@split-brain/bot": "*",
+    "@split-brain/contract": "*",
+    "@split-brain/protocol": "*",
+    "@split-brain/relay": "*",
+    "@split-brain/sim": "*"
+  }
+}

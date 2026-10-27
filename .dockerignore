@@ -1,0 +1,8 @@
+**/node_modules
+.git
+.split-brain
+submission
+**/dist
+.cache
+.env
+*.log

@@ -1,0 +1,33 @@
+name: Join the leaderboard
+description: Get your fork scored daily on the public leaderboard (public seeds only).
+title: "Leaderboard: <your handle>"
+labels: ["leaderboard"]
+body:
+  - type: input
+    id: handle
+    attributes:
+      label: Display name
+      description: Shown on the leaderboard.
+    validations:
+      required: true
+  - type: input
+    id: fork
+    attributes:
+      label: Fork URL
+      description: Public URL of your fork, e.g. https://github.com/you/split-brain
+    validations:
+      required: true
+  - type: dropdown
+    id: track
+    attributes:
+      label: Your track
+      options: [undecided, sync-core, ai-peer, files, runtime, hostile]
+    validations:
+      required: true
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Consent
+      options:
+        - label: I'm happy for my display name and scores to appear publicly.
+          required: true

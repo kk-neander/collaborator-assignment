@@ -1,0 +1,7 @@
+{
+  "name": "@split-brain/protocol",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "zod": "^4.1.0" }
+}

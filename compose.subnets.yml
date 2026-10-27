@@ -1,0 +1,13 @@
+# Used automatically by ./sb when Docker has run out of default network address
+# pools ("all predefined address pools have been fully subnetted"), which happens
+# on machines with many compose projects. Pick other ranges if these collide.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${SB_SUBNET_DEFAULT:-10.231.1.0/24}
+  sandbox:
+    internal: true
+    ipam:
+      config:
+        - subnet: ${SB_SUBNET_SANDBOX:-10.231.2.0/24}
